@@ -1,6 +1,6 @@
 {
   "name": "directus-extension-tags-m2m-interface",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": {
     "email": "dimitrov.adrian+gh@gmail.com",
     "name": "Adrian Dimitrov"
@@ -8,12 +8,12 @@
   "license": "gpl-3.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/dimitrov-adrian/directus-extension-svgmap-picker-interface.git"
+    "url": "https://github.com/dimitrov-adrian/directus-extension-tags-m2m-interface.git"
   },
   "bugs": {
-    "url": "https://github.com/dimitrov-adrian/directus-extension-svgmap-picker-interface/issues"
+    "url": "https://github.com/dimitrov-adrian/directus-extension-tags-m2m-interface/issues"
   },
-  "homepage": "https://github.com/dimitrov-adrian/directus-extension-svgmap-picker-interface",
+  "homepage": "https://github.com/dimitrov-adrian/directus-extension-tags-m2m-interface",
   "keywords": [
     "directus",
     "directus-extension",
