@@ -4,7 +4,7 @@ import TagsM2MInterface from './interface.vue';
 export default defineInterface({
 	id: 'extension-tags-m2m',
 	name: '$t:interfaces.tags.tags',
-	description: '$t:interfaces.tags.description',
+	description: '$t:interfaces.list-m2m.description',
 	icon: 'local_offer',
 	component: TagsM2MInterface,
 	relational: true,
@@ -57,8 +57,10 @@ export default defineInterface({
 					width: 'full',
 					interface: 'system-field',
 					options: {
+						allowNone: false,
 						typeAllowList: ['string', 'integer', 'bigInteger'],
-						allowPrimaryKey: true,
+						allowForeignKeys: false,
+						allowPrimaryKey: false,
 					},
 				},
 			},

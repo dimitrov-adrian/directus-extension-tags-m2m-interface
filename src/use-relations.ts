@@ -16,11 +16,8 @@ export type RelationM2M = {
 	type: 'm2m';
 };
 
-export function useRelationM2M(
-	collection: Ref<string>,
-	field: Ref<string>,
-	{ useCollectionsStore, useRelationsStore, useFieldsStore }
-) {
+export function useRelationM2M(collection: Ref<string>, field: Ref<string>, stores: Record<string, any>) {
+	const { useCollectionsStore, useRelationsStore, useFieldsStore } = stores;
 	const relationsStore = useRelationsStore();
 	const collectionsStore = useCollectionsStore();
 	const fieldsStore = useFieldsStore();

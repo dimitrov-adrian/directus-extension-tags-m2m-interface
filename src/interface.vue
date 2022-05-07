@@ -1,5 +1,5 @@
 <template>
-	<v-notice v-if="!junctionCollection || !relationCollection" type="warning">
+	<v-notice v-if="!junctionCollection || !relationCollection || !referencingField" type="warning">
 		{{ t('relationship_not_setup') }}
 	</v-notice>
 
@@ -8,7 +8,7 @@
 			<template #activator>
 				<v-input
 					v-model="localInput"
-					:placeholder="placeholder || t('creating_in', { collection: relationCollection })"
+					:placeholder="placeholder || t('search_items')"
 					:disabled="disabled"
 					@keydown="onInputKeyDown"
 					@focus="menuActive = true"
@@ -45,13 +45,15 @@
 						</v-list-item-content>
 					</v-list-item>
 				</template>
+			</v-list>
 
-				<template v-else-if="!allowCustom">
+			<template v-else-if="localInput && !allowCustom">
+				<v-list>
 					<v-list-item class="no-items">
 						{{ t('no_items') }}
 					</v-list-item>
-				</template>
-			</v-list>
+				</v-list>
+			</template>
 		</v-menu>
 
 		<div v-if="sortedItems.length" class="tags">
@@ -152,16 +154,19 @@ export default defineComponent({
 		const suggestedItemsSelected = ref<number | null>(null);
 		const api = useApi();
 
-		const fetchFields = [relatedPrimaryKeyField, props.referencingField];
+		const referencingField = props.referencingField || relatedPrimaryKeyField;
+		const fetchFields = [relatedPrimaryKeyField, referencingField];
 
 		const items = usePreviews(value);
 		const sortedItems = computed(() => {
 			if (!junctionField) return items.value;
 			const sorted = clone(items.value).sort(
 				(a: Record<string, Record<string, any>>, b: Record<string, Record<string, any>>) => {
-					const aVal: string = a[junctionField][props.referencingField];
-					const bVal: string = b[junctionField][props.referencingField];
-					return props.sortDirection === 'desc' ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
+					const aVal: string = a[junctionField][referencingField];
+					const bVal: string = b[junctionField][referencingField];
+					return props.sortDirection === 'desc'
+						? bVal.localeCompare(aVal.toString())
+						: aVal.localeCompare(bVal.toString());
 				}
 			);
 
@@ -228,7 +233,7 @@ export default defineComponent({
 			const value = localInput.value?.trim();
 			if (!value || itemValueStaged(value)) return;
 
-			const cachedItem = suggestedItems.value.find((item) => item[props.referencingField] === value);
+			const cachedItem = suggestedItems.value.find((item) => item[referencingField] === value);
 			if (cachedItem) {
 				addItemFromSuggestion(cachedItem);
 				return;
@@ -239,7 +244,7 @@ export default defineComponent({
 				if (item) {
 					addItemFromSuggestion(item);
 				} else if (props.allowCustom) {
-					addItemFromSuggestion({ [props.referencingField]: value });
+					addItemFromSuggestion({ [referencingField]: value });
 				}
 			} catch (err: any) {
 				window.console.warn(err);
@@ -248,12 +253,12 @@ export default defineComponent({
 
 		function itemValueStaged(value: string): boolean {
 			if (!value) return false;
-			return !!items.value.find((item) => item[junctionField][props.referencingField] === value);
+			return !!items.value.find((item) => item[junctionField][referencingField] === value);
 		}
 
 		function itemValueAvailable(value: string): boolean {
 			if (!value) return false;
-			return !!suggestedItems.value.find((item) => item[props.referencingField] === value);
+			return !!suggestedItems.value.find((item) => item[referencingField] === value);
 		}
 
 		async function refreshSuggestions(keyword: string) {
@@ -270,11 +275,9 @@ export default defineComponent({
 					fields: fetchFields,
 					search: keyword,
 					filter: {
-						...(props.referencingField && {
-							[props.referencingField]: {
-								_contains: keyword,
-							},
-						}),
+						[referencingField]: {
+							_contains: keyword,
+						},
 						...(currentIds.length > 0 && {
 							[relatedPrimaryKeyField]: {
 								_nin: currentIds.join(','),
@@ -303,7 +306,7 @@ export default defineComponent({
 					limit: 1,
 					fields: fetchFields,
 					filter: {
-						[props.referencingField]: {
+						[referencingField]: {
 							_eq: keyword,
 						},
 					},
@@ -386,6 +389,8 @@ export default defineComponent({
 						: suggestedItemsSelected.value - 1;
 				return;
 			}
+
+			if (event.key === 'Tab' && !localInput.value && suggestedItems.value.length < 1) return;
 
 			if (event.key === 'ArrowDown' || event.key === 'Tab') {
 				event.preventDefault();
