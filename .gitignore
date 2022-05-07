@@ -1,0 +1,5 @@
+node_modules
+/editorjs
+/dist
+/*.tgz
+/*.zip
