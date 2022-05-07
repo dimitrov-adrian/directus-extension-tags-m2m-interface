@@ -47,13 +47,11 @@
 				</template>
 			</v-list>
 
-			<template v-else-if="localInput && !allowCustom">
-				<v-list>
-					<v-list-item class="no-items">
-						{{ t('no_items') }}
-					</v-list-item>
-				</v-list>
-			</template>
+			<v-list v-else-if="localInput && !allowCustom">
+				<v-list-item class="no-items">
+					{{ t('no_items') }}
+				</v-list-item>
+			</v-list>
 		</v-menu>
 
 		<div v-if="sortedItems.length" class="tags">
@@ -64,6 +62,7 @@
 				class="tag clickable"
 				small
 				label
+				clickable
 				@click="deleteItem(item)"
 			>
 				{{ item[junctionField][referencingField] }}
@@ -109,7 +108,7 @@ export default defineComponent({
 		},
 		allowCustom: {
 			type: Boolean,
-			default: false,
+			default: true,
 		},
 		referencingField: {
 			type: String,
