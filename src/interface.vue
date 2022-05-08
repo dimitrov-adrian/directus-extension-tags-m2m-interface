@@ -1,9 +1,22 @@
 <template>
-	<v-notice v-if="!junctionCollection || !relationCollection || !referencingField" type="warning">
+	<v-notice v-if="!junctionCollection || !relationCollection" type="warning">
 		{{ t('relationship_not_setup') }}
 	</v-notice>
 
-	<div v-else class="tags-m2m">
+	<v-notice v-else-if="!referencingField" type="warning full">
+		<div>
+			<p>{{ t('display_template_not_setup') }}</p>
+			<ul>
+				<li>
+					<strong>{{ t('corresponding_field') }}</strong>
+					<span>:&nbsp;</span>
+					{{ t('errors.NOT_NULL_VIOLATION') }}
+				</li>
+			</ul>
+		</div>
+	</v-notice>
+
+	<template v-else>
 		<v-menu v-model="menuActive" :disabled="disabled" attached fullHeight>
 			<template #activator>
 				<v-input
@@ -52,7 +65,7 @@
 				</template>
 			</v-list>
 
-			<v-list v-else-if="localInput && !allowCustom">
+			<v-list v-else-if="localInput && !createAllowed">
 				<v-list-item class="no-items">
 					{{ t('no_items') }}
 				</v-list-item>
@@ -74,7 +87,7 @@
 				{{ item[junctionField][referencingField] }}
 			</v-chip>
 		</div>
-	</div>
+	</template>
 </template>
 
 <script lang="ts">
@@ -146,12 +159,19 @@ export default defineComponent({
 		const { t } = useI18n();
 		const { value, collection, field } = toRefs(props);
 		const { relationInfo } = useRelationM2M(collection, field, useStores());
+		const { usePermissionsStore } = useStores();
+		const { hasPermission } = usePermissionsStore();
 
 		const relationCollection = relationInfo.value.relatedCollection.collection;
 		const relatedPrimaryKeyField = relationInfo.value.relatedPrimaryKeyField.field;
 		const junctionCollection = relationInfo.value.junctionCollection.collection;
 		const junctionField = relationInfo.value.junctionField.field;
 		const junctionPrimaryKeyField = relationInfo.value.junctionPrimaryKeyField.field;
+
+		const createAllowed = computed(() => {
+			if (!relationInfo.value || !props.allowCustom) return false;
+			return hasPermission(relationCollection, 'create');
+		});
 
 		const localInput = ref<string>('');
 		const menuActive = ref<boolean>(false);
@@ -180,7 +200,7 @@ export default defineComponent({
 
 		const showAddCustom = computed(
 			() =>
-				props.allowCustom &&
+				createAllowed.value &&
 				localInput.value?.trim() &&
 				!itemValueAvailable(localInput.value) &&
 				!itemValueStaged(localInput.value)
@@ -201,6 +221,7 @@ export default defineComponent({
 			junctionField,
 			junctionPrimaryKeyField,
 
+			createAllowed,
 			menuActive,
 			showAddCustom,
 			localInput,
@@ -250,7 +271,7 @@ export default defineComponent({
 				const item = await findByKeyword(value);
 				if (item) {
 					addItemFromSuggestion(item);
-				} else if (props.allowCustom) {
+				} else if (createAllowed.value) {
 					addItemFromSuggestion({ [referencingField]: value });
 				}
 			} catch (err: any) {
@@ -384,7 +405,7 @@ export default defineComponent({
 				if (suggestedItemsSelected.value !== null && suggestedItems.value[suggestedItemsSelected.value]) {
 					addItemFromSuggestion(suggestedItems.value[suggestedItemsSelected.value]);
 					localInput.value = '';
-				} else if (props.allowCustom) {
+				} else if (createAllowed.value) {
 					addItemFromInput();
 					localInput.value = '';
 				}
