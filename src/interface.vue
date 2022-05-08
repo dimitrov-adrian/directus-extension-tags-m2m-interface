@@ -74,8 +74,8 @@
 
 		<div v-if="sortedItems.length" class="tags">
 			<v-chip
-				v-for="(item, index) in sortedItems"
-				:key="index"
+				v-for="item in sortedItems"
+				:key="item[junctionField][referencingField]"
 				:disabled="disabled"
 				class="tag clickable"
 				small
@@ -301,7 +301,6 @@ export default defineComponent({
 				params: {
 					limit: 10,
 					fields: fetchFields,
-					search: keyword,
 					filter: {
 						[referencingField]: {
 							_contains: keyword,
