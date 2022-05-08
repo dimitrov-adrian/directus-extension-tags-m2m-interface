@@ -17,7 +17,7 @@
 	</v-notice>
 
 	<template v-else>
-		<v-menu v-model="menuActive" :disabled="disabled" attached fullHeight>
+		<v-menu v-model="menuActive" :disabled="disabled" attached>
 			<template #activator>
 				<v-input
 					v-model="localInput"
