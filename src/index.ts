@@ -60,7 +60,7 @@ export default defineInterface({
 						allowNone: false,
 						typeAllowList: ['string', 'integer', 'bigInteger'],
 						allowForeignKeys: false,
-						allowPrimaryKey: false,
+						allowPrimaryKey: true,
 					},
 				},
 			},
