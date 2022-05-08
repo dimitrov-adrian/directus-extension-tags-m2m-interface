@@ -4,7 +4,7 @@
 	</v-notice>
 
 	<div v-else class="tags-m2m">
-		<v-menu v-model="menuActive" :disabled="disabled" attached>
+		<v-menu v-model="menuActive" :disabled="disabled" attached fullHeight>
 			<template #activator>
 				<v-input
 					v-model="localInput"
@@ -25,8 +25,13 @@
 
 			<v-list v-if="showAddCustom || suggestedItems.length">
 				<v-list-item v-if="showAddCustom" clickable @click="addItemFromInput">
-					<v-list-item-content class="add-custom">
-						{{ t('creating_unit', { unit: localInput }) }}
+					<v-list-item-content class="add-custom" v-tooltip="t('interfaces.tags.add_tags')">
+						{{
+							t('field_in_collection', {
+								field: localInput,
+								collection: t('create_item'),
+							})
+						}}
 					</v-list-item-content>
 				</v-list-item>
 
@@ -63,6 +68,7 @@
 				small
 				label
 				clickable
+				v-tooltip="t('remove')"
 				@click="deleteItem(item)"
 			>
 				{{ item[junctionField][referencingField] }}
@@ -156,7 +162,7 @@ export default defineComponent({
 		const referencingField = props.referencingField || relatedPrimaryKeyField;
 		const fetchFields = [relatedPrimaryKeyField, referencingField];
 
-		const items = usePreviews(value);
+		const items = updatePreviews(value);
 		const sortedItems = computed(() => {
 			if (!junctionField) return items.value;
 			const sorted = clone(items.value).sort(
@@ -216,6 +222,8 @@ export default defineComponent({
 		}
 
 		function deleteItem(item: any) {
+			if (value.value && !Array.isArray(value.value)) return;
+
 			if (junctionPrimaryKeyField in item) {
 				emitter(value.value.filter((x: any) => x !== item[junctionPrimaryKeyField]));
 			} else {
@@ -315,7 +323,7 @@ export default defineComponent({
 			return response?.data?.data?.pop() || null;
 		}
 
-		function usePreviews(value: Ref) {
+		function updatePreviews(value: Ref) {
 			const items = ref<any[]>([]);
 			const relationalFetchFields = [
 				junctionPrimaryKeyField,
@@ -323,6 +331,8 @@ export default defineComponent({
 			];
 
 			watch(value, (newVal) => update(newVal));
+
+			if (value.value && !Array.isArray(value.value)) return items;
 
 			update(value.value);
 
@@ -358,6 +368,11 @@ export default defineComponent({
 		}
 
 		async function onInputKeyDown(event: KeyboardEvent) {
+			if (event.key === 'Escape' && !menuActive.value && localInput.value) {
+				localInput.value = '';
+				return;
+			}
+
 			if (event.key === 'Escape') {
 				event.preventDefault();
 				menuActive.value = false;
@@ -376,7 +391,7 @@ export default defineComponent({
 				return;
 			}
 
-			if (event.key === 'ArrowUp') {
+			if (event.key === 'ArrowUp' || (event.key === 'Tab' && event.shiftKey)) {
 				event.preventDefault();
 				if (suggestedItems.value.length < 1) return;
 				// Select previous from the list, if on top, then go last.
@@ -389,7 +404,14 @@ export default defineComponent({
 				return;
 			}
 
-			if (event.key === 'Tab' && !localInput.value && suggestedItems.value.length < 1) return;
+			if (event.key === 'Tab') {
+				if (!menuActive.value) {
+					localInput.value = '';
+					return;
+				}
+
+				if (!localInput.value && suggestedItems.value.length < 1) return;
+			}
 
 			if (event.key === 'ArrowDown' || event.key === 'Tab') {
 				event.preventDefault();
@@ -412,9 +434,11 @@ export default defineComponent({
 .add-custom {
 	font-style: oblique;
 }
+
 .no-items {
 	color: var(--foreground-subdued);
 }
+
 .tags {
 	display: flex;
 	flex-wrap: wrap;
@@ -422,6 +446,7 @@ export default defineComponent({
 	justify-content: flex-start;
 	padding: 4px 0px 0px;
 }
+
 .tag {
 	margin-top: 8px;
 	margin-right: 8px;
