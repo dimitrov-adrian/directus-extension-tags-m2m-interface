@@ -17,7 +17,7 @@
 	</v-notice>
 
 	<template v-else>
-		<v-menu v-model="menuActive" :disabled="disabled" attached>
+		<v-menu v-if="selectionAllowed" v-model="menuActive" attached>
 			<template #activator>
 				<v-input
 					v-model="localInput"
@@ -76,7 +76,7 @@
 			<v-chip
 				v-for="item in sortedItems"
 				:key="item[junctionField][referencingField]"
-				:disabled="disabled"
+				:disabled="disabled || !selectionAllowed"
 				class="tag clickable"
 				small
 				label
@@ -102,7 +102,7 @@ import { useRelationM2M } from './use-relations';
 export default defineComponent({
 	props: {
 		value: {
-			type: Array as PropType<(number | string | Record<string, any>)[] | null>,
+			type: Array as PropType<(number | string | Record<string, any>)[] | Record<string, any>>,
 			default: null,
 		},
 		primaryKey: {
@@ -168,9 +168,13 @@ export default defineComponent({
 		const junctionField = relationInfo.value.junctionField.field;
 		const junctionPrimaryKeyField = relationInfo.value.junctionPrimaryKeyField.field;
 
+		const selectionAllowed = computed(() => {
+			if (!relationInfo.value) return false;
+			return hasPermission(junctionCollection, 'create');
+		});
 		const createAllowed = computed(() => {
 			if (!relationInfo.value || !props.allowCustom) return false;
-			return hasPermission(relationCollection, 'create');
+			return hasPermission(relationCollection, 'create') && hasPermission(junctionCollection, 'create');
 		});
 
 		const localInput = ref<string>('');
@@ -222,6 +226,7 @@ export default defineComponent({
 			junctionPrimaryKeyField,
 
 			createAllowed,
+			selectionAllowed,
 			menuActive,
 			showAddCustom,
 			localInput,
@@ -343,14 +348,14 @@ export default defineComponent({
 			return response?.data?.data?.pop() || null;
 		}
 
-		function updatePreviews(value: Ref) {
+		function updatePreviews(value: Ref<string[]>) {
 			const items = ref<any[]>([]);
 			const relationalFetchFields = [
 				junctionPrimaryKeyField,
 				...fetchFields.map((field) => junctionField + '.' + field),
 			];
 
-			watch(value, (newVal) => update(newVal));
+			watch(value, debounce((val: string[]) => update(val), 300));
 
 			if (value.value && !Array.isArray(value.value)) return items;
 
