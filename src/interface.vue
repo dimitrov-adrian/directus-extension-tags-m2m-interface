@@ -72,7 +72,9 @@
 			</v-list>
 		</v-menu>
 
-		<div v-if="sortedItems.length" class="tags">
+		<v-skeleton-loader v-if="loading" type="block-list-item-dense" />
+
+		<div v-else-if="sortedItems.length" class="tags">
 			<v-chip
 				v-for="item in sortedItems"
 				:key="item[junctionField][referencingField]"
@@ -186,7 +188,7 @@ export default defineComponent({
 		const referencingField = props.referencingField || relatedPrimaryKeyField;
 		const fetchFields = [relatedPrimaryKeyField, referencingField];
 
-		const items = updatePreviews(value);
+		const { items, loading } = usePreviews(value);
 		const sortedItems = computed(() => {
 			if (!junctionField) return items.value;
 			const sorted = clone(items.value).sort(
@@ -234,6 +236,7 @@ export default defineComponent({
 			suggestedItemsSelected,
 			sortedItems,
 			items,
+			loading,
 
 			onInputKeyDown,
 			addItemFromInput,
@@ -279,6 +282,7 @@ export default defineComponent({
 				} else if (createAllowed.value) {
 					addItemFromSuggestion({ [referencingField]: value });
 				}
+				localInput.value = '';
 			} catch (err: any) {
 				window.console.warn(err);
 			}
@@ -348,20 +352,24 @@ export default defineComponent({
 			return response?.data?.data?.pop() || null;
 		}
 
-		function updatePreviews(value: Ref<string[]>) {
+		function usePreviews(value: Ref<string[]>) {
 			const items = ref<any[]>([]);
+			const loading = ref<boolean>(!!value.value);
 			const relationalFetchFields = [
 				junctionPrimaryKeyField,
 				...fetchFields.map((field) => junctionField + '.' + field),
 			];
 
-			watch(value, debounce((val: string[]) => update(val), 300));
+			watch(
+				value,
+				debounce((val: string[]) => update(val), 300)
+			);
 
-			if (value.value && !Array.isArray(value.value)) return items;
+			if (value.value && Array.isArray(value.value)) {
+				update(value.value);
+			}
 
-			update(value.value);
-
-			return items;
+			return { items, loading };
 
 			async function update(value: any[]) {
 				const ids = (value || []).filter((x: any) => typeof x !== 'object');
@@ -372,6 +380,7 @@ export default defineComponent({
 					return;
 				}
 
+				loading.value = true;
 				const response = await api.get(getEndpoint(junctionCollection), {
 					params: {
 						fields: relationalFetchFields,
@@ -389,6 +398,8 @@ export default defineComponent({
 				} else {
 					items.value = [...staged];
 				}
+
+				loading.value = false;
 			}
 		}
 
@@ -411,7 +422,6 @@ export default defineComponent({
 					localInput.value = '';
 				} else if (createAllowed.value) {
 					addItemFromInput();
-					localInput.value = '';
 				}
 				return;
 			}
