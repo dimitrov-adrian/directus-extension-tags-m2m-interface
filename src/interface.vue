@@ -72,7 +72,7 @@
 			</v-list>
 		</v-menu>
 
-		<v-skeleton-loader v-if="loading" type="block-list-item-dense" />
+		<v-skeleton-loader v-if="loading" type="block-list-item" />
 
 		<div v-else-if="sortedItems.length" class="tags">
 			<v-chip
