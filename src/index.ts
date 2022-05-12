@@ -4,35 +4,15 @@ import TagsM2MInterface from './interface.vue';
 export default defineInterface({
 	id: 'extension-tags-m2m',
 	name: '$t:interfaces.tags.tags',
-	description: '$t:interfaces.list-m2m.description',
+	description: '$t:interfaces.tags.description',
 	icon: 'local_offer',
 	component: TagsM2MInterface,
 	relational: true,
 	types: ['alias'],
 	localTypes: ['m2m'],
 	group: 'relational',
-	options: ({ editing, relations }) => {
-		const displayTemplateMeta =
-			editing === '+'
-				? {
-						interface: 'presentation-notice',
-						options: {
-							text: '$t:interfaces.list-m2m.display_template_configure_notice',
-						},
-				  }
-				: {
-						interface: 'system-display-template',
-						options: {
-							collectionName: relations.o2m?.collection,
-						},
-				  };
-
+	options: ({ relations }) => {
 		return [
-			{
-				field: 'template',
-				name: '$t:display_template',
-				meta: displayTemplateMeta,
-			},
 			{
 				field: 'placeholder',
 				name: '$t:placeholder',
