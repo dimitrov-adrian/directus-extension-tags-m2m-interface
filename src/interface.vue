@@ -95,7 +95,7 @@
 <script lang="ts">
 import { computed, defineComponent, PropType, ref, toRefs, Ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { clone, debounce } from 'lodash';
+import { clone, debounce, partition } from 'lodash';
 import { Filter } from '@directus/shared/types';
 import { useApi, useStores } from '@directus/shared/composables';
 import { parseFilter, getEndpoint } from '@directus/shared/utils';
@@ -104,7 +104,7 @@ import { useRelationM2M } from './use-relations';
 export default defineComponent({
 	props: {
 		value: {
-			type: Array as PropType<(number | string | Record<string, any>)[] | Record<string, any>>,
+			type: Array as PropType<number | string | Record<string, any>>,
 			default: null,
 		},
 		primaryKey: {
@@ -352,7 +352,7 @@ export default defineComponent({
 			return response?.data?.data?.pop() || null;
 		}
 
-		function usePreviews(value: Ref<string[]>) {
+		function usePreviews(value: Ref<number | string | Record<string, any>[]>) {
 			const items = ref<any[]>([]);
 			const loading = ref<boolean>(!!value.value);
 			const relationalFetchFields = [
@@ -362,7 +362,7 @@ export default defineComponent({
 
 			watch(
 				value,
-				debounce((val: string[]) => update(val), 300)
+				debounce((value: (number | string | Record<string, any>)[]) => update(value), 300)
 			);
 
 			if (value.value && Array.isArray(value.value)) {
@@ -371,12 +371,24 @@ export default defineComponent({
 
 			return { items, loading };
 
-			async function update(value: any[]) {
-				const ids = (value || []).filter((x: any) => typeof x !== 'object');
-				const staged = (value || []).filter((x: any) => typeof x === 'object');
+			async function update(value: (number | string | Record<string, any>)[]) {
+				const [ids, staged] = partition(
+					value || [],
+					(x: number | string | Record<string, any>) => typeof x !== 'object'
+				);
 
 				if (!ids.length) {
 					items.value = [...staged];
+					return;
+				}
+
+				const cached = items.value.filter(
+					(x: Record<string, any>) =>
+						typeof x === 'object' && x[junctionPrimaryKeyField] && ids.includes(x[junctionPrimaryKeyField])
+				);
+
+				if (cached.length === ids.length) {
+					items.value = [...cached, ...staged];
 					return;
 				}
 
@@ -384,7 +396,7 @@ export default defineComponent({
 				const response = await api.get(getEndpoint(junctionCollection), {
 					params: {
 						fields: relationalFetchFields,
-						limit: -1,
+						limit: ids.length,
 						filter: {
 							id: {
 								_in: ids,
