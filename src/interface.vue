@@ -17,7 +17,7 @@
 	</v-notice>
 
 	<template v-else>
-		<v-menu v-if="selectionAllowed" v-model="menuActive" attached>
+		<v-menu v-if="selectAllowed" v-model="menuActive" attached>
 			<template #activator>
 				<v-input
 					v-model="localInput"
@@ -78,7 +78,7 @@
 			<v-chip
 				v-for="item in sortedItems"
 				:key="item[junctionField][referencingField]"
-				:disabled="disabled || !selectionAllowed"
+				:disabled="disabled || !selectAllowed"
 				class="tag clickable"
 				small
 				label
@@ -92,8 +92,8 @@
 	</template>
 </template>
 
-<script lang="ts">
-import { computed, defineComponent, PropType, ref, toRefs, Ref, watch } from 'vue';
+<script lang="ts" setup>
+import { computed, ref, toRefs, Ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { clone, debounce, partition } from 'lodash';
 import { Filter } from '@directus/shared/types';
@@ -101,380 +101,328 @@ import { useApi, useStores } from '@directus/shared/composables';
 import { parseFilter, getEndpoint } from '@directus/shared/utils';
 import { useRelationM2M } from './use-relations';
 
-export default defineComponent({
-	props: {
-		value: {
-			type: Array as PropType<number | string | Record<string, any>>,
-			default: null,
-		},
-		primaryKey: {
-			type: [Number, String],
-			required: true,
-		},
-		collection: {
-			type: String,
-			required: true,
-		},
-		field: {
-			type: String,
-			required: true,
-		},
-		disabled: {
-			type: Boolean,
-			default: false,
-		},
-		placeholder: {
-			type: String,
-			default: null,
-		},
-		allowCustom: {
-			type: Boolean,
-			default: true,
-		},
-		referencingField: {
-			type: String,
-			default: '',
-		},
-		sortField: {
-			type: String,
-			default: undefined,
-		},
-		sortDirection: {
-			type: String,
-			default: 'desc',
-		},
-		iconLeft: {
-			type: String,
-			default: null,
-		},
-		iconRight: {
-			type: String,
-			default: 'local_offer',
-		},
-		filter: {
-			type: Object as PropType<Filter>,
-			default: null,
-		},
-	},
-	emits: ['input'],
-	setup(props, { emit }) {
-		const { t } = useI18n();
-		const { value, collection, field } = toRefs(props);
-		const { relationInfo } = useRelationM2M(collection, field, useStores());
-		const { usePermissionsStore } = useStores();
-		const { hasPermission } = usePermissionsStore();
+const props = withDefaults(
+	defineProps<{
+		value?: (number | string | Record<string, any>)[];
+		primaryKey: string | number;
+		collection: string;
+		field: string;
+		placeholder?: string | null;
+		disabled?: boolean;
+		allowCustom?: boolean;
+		filter?: Filter | null;
+		referencingField: string;
+		sortField?: string | null;
+		sortDirection?: string | null;
+		iconLeft?: string | null;
+		iconRight?: string | null;
+	}>(),
+	{
+		value: () => [],
+		disabled: false,
+		enableCreate: true,
+		enableSelect: true,
+		filter: () => null,
+		sortDirection: 'desc',
+		iconRight: 'local_offer',
+	}
+);
 
-		const relationCollection = relationInfo.value.relatedCollection.collection;
-		const relatedPrimaryKeyField = relationInfo.value.relatedPrimaryKeyField.field;
-		const junctionCollection = relationInfo.value.junctionCollection.collection;
-		const junctionField = relationInfo.value.junctionField.field;
-		const junctionPrimaryKeyField = relationInfo.value.junctionPrimaryKeyField.field;
+const emit = defineEmits(['input']);
 
-		const selectionAllowed = computed(() => {
-			if (!relationInfo.value) return false;
-			return hasPermission(junctionCollection, 'create');
-		});
-		const createAllowed = computed(() => {
-			if (!relationInfo.value || !props.allowCustom) return false;
-			return hasPermission(relationCollection, 'create') && hasPermission(junctionCollection, 'create');
-		});
+const { t } = useI18n();
+const { value, collection, field } = toRefs(props);
+const { relationInfo } = useRelationM2M(collection, field, useStores());
+const { usePermissionsStore, useUserStore } = useStores();
+const { currentUser } = useUserStore();
+const { hasPermission } = usePermissionsStore();
 
-		const localInput = ref<string>('');
-		const menuActive = ref<boolean>(false);
-		const suggestedItems = ref<Record<string, any>[]>([]);
-		const suggestedItemsSelected = ref<number | null>(null);
-		const api = useApi();
+const relationCollection = relationInfo.value.relatedCollection.collection;
+const relatedPrimaryKeyField = relationInfo.value.relatedPrimaryKeyField.field;
+const junctionCollection = relationInfo.value.junctionCollection.collection;
+const junctionField = relationInfo.value.junctionField.field;
+const junctionPrimaryKeyField = relationInfo.value.junctionPrimaryKeyField.field;
 
-		const referencingField = props.referencingField || relatedPrimaryKeyField;
-		const fetchFields = [relatedPrimaryKeyField, referencingField];
-
-		const { items, loading } = usePreviews(value);
-		const sortedItems = computed(() => {
-			if (!junctionField) return items.value;
-			const sorted = clone(items.value).sort(
-				(a: Record<string, Record<string, any>>, b: Record<string, Record<string, any>>) => {
-					const aVal: string = a[junctionField][referencingField];
-					const bVal: string = b[junctionField][referencingField];
-					return props.sortDirection === 'desc'
-						? bVal.localeCompare(aVal.toString())
-						: aVal.localeCompare(bVal.toString());
-				}
-			);
-
-			return sorted;
-		});
-
-		const showAddCustom = computed(
-			() =>
-				createAllowed.value &&
-				localInput.value?.trim() &&
-				!itemValueAvailable(localInput.value) &&
-				!itemValueStaged(localInput.value)
-		);
-
-		watch(
-			localInput,
-			debounce((val: string) => {
-				refreshSuggestions(val);
-				menuActive.value = true;
-			}, 300)
-		);
-
-		return {
-			relationCollection,
-			relatedPrimaryKeyField,
-			junctionCollection,
-			junctionField,
-			junctionPrimaryKeyField,
-
-			createAllowed,
-			selectionAllowed,
-			menuActive,
-			showAddCustom,
-			localInput,
-			suggestedItems,
-			suggestedItemsSelected,
-			sortedItems,
-			items,
-			loading,
-
-			onInputKeyDown,
-			addItemFromInput,
-			addItemFromSuggestion,
-			deleteItem,
-
-			t,
-		};
-
-		function emitter(newVal: any[] | null) {
-			emit('input', newVal);
-		}
-
-		function deleteItem(item: any) {
-			if (value.value && !Array.isArray(value.value)) return;
-
-			if (junctionPrimaryKeyField in item) {
-				emitter(value.value.filter((x: any) => x !== item[junctionPrimaryKeyField]));
-			} else {
-				emitter(value.value.filter((x: any) => x !== item));
-			}
-		}
-
-		function addItemFromSuggestion(item: any) {
-			menuActive.value = false;
-			emitter([...(props.value || []), { [junctionField]: item }]);
-		}
-
-		async function addItemFromInput() {
-			const value = localInput.value?.trim();
-			if (!value || itemValueStaged(value)) return;
-
-			const cachedItem = suggestedItems.value.find((item) => item[referencingField] === value);
-			if (cachedItem) {
-				addItemFromSuggestion(cachedItem);
-				return;
-			}
-
-			try {
-				const item = await findByKeyword(value);
-				if (item) {
-					addItemFromSuggestion(item);
-				} else if (createAllowed.value) {
-					addItemFromSuggestion({ [referencingField]: value });
-				}
-				localInput.value = '';
-			} catch (err: any) {
-				window.console.warn(err);
-			}
-		}
-
-		function itemValueStaged(value: string): boolean {
-			if (!value) return false;
-			return !!items.value.find((item) => item[junctionField][referencingField] === value);
-		}
-
-		function itemValueAvailable(value: string): boolean {
-			if (!value) return false;
-			return !!suggestedItems.value.find((item) => item[referencingField] === value);
-		}
-
-		async function refreshSuggestions(keyword: string) {
-			suggestedItemsSelected.value = null;
-			if (!keyword || keyword.length < 1) {
-				suggestedItems.value = [];
-				return;
-			}
-			const filter = parseFilter(props.filter, null) || {};
-			const currentIds = items.value.map((i) => i[junctionField][relatedPrimaryKeyField]).filter((i) => !!i);
-			const query = {
-				params: {
-					limit: 10,
-					fields: fetchFields,
-					filter: {
-						[referencingField]: {
-							_contains: keyword,
-						},
-						...(currentIds.length > 0 && {
-							[relatedPrimaryKeyField]: {
-								_nin: currentIds.join(','),
-							},
-						}),
-						...filter,
-					},
-					sort: props.sortField
-						? props.sortDirection === 'desc'
-							? `-${props.sortField}`
-							: props.sortField
-						: `-${relatedPrimaryKeyField}`,
-				},
-			};
-			const response = await api.get(getEndpoint(relationCollection), query);
-			if (response?.data?.data && Array.isArray(response.data.data)) {
-				suggestedItems.value = response.data.data;
-			} else {
-				suggestedItems.value = [];
-			}
-		}
-
-		async function findByKeyword(keyword: string): Promise<Record<string, any> | null> {
-			const response = await api.get(getEndpoint(relationCollection), {
-				params: {
-					limit: 1,
-					fields: fetchFields,
-					filter: {
-						[referencingField]: {
-							_eq: keyword,
-						},
-					},
-				},
-			});
-
-			return response?.data?.data?.pop() || null;
-		}
-
-		function usePreviews(value: Ref<number | string | Record<string, any>[]>) {
-			const items = ref<any[]>([]);
-			const loading = ref<boolean>(!!value.value);
-			const relationalFetchFields = [
-				junctionPrimaryKeyField,
-				...fetchFields.map((field) => junctionField + '.' + field),
-			];
-
-			watch(
-				value,
-				debounce((value: (number | string | Record<string, any>)[]) => update(value), 300)
-			);
-
-			if (value.value && Array.isArray(value.value)) {
-				update(value.value);
-			}
-
-			return { items, loading };
-
-			async function update(value: (number | string | Record<string, any>)[]) {
-				const [ids, staged] = partition(
-					value || [],
-					(x: number | string | Record<string, any>) => typeof x !== 'object'
-				);
-
-				if (!ids.length) {
-					items.value = [...staged];
-					return;
-				}
-
-				const cached = items.value.filter(
-					(x: Record<string, any>) =>
-						typeof x === 'object' && x[junctionPrimaryKeyField] && ids.includes(x[junctionPrimaryKeyField])
-				);
-
-				if (cached.length === ids.length) {
-					items.value = [...cached, ...staged];
-					return;
-				}
-
-				loading.value = true;
-				const response = await api.get(getEndpoint(junctionCollection), {
-					params: {
-						fields: relationalFetchFields,
-						limit: ids.length,
-						filter: {
-							id: {
-								_in: ids,
-							},
-						},
-					},
-				});
-
-				if (response?.data?.data && Array.isArray(response.data.data)) {
-					items.value = [...response.data.data, ...staged];
-				} else {
-					items.value = [...staged];
-				}
-
-				loading.value = false;
-			}
-		}
-
-		async function onInputKeyDown(event: KeyboardEvent) {
-			if (event.key === 'Escape' && !menuActive.value && localInput.value) {
-				localInput.value = '';
-				return;
-			}
-
-			if (event.key === 'Escape') {
-				event.preventDefault();
-				menuActive.value = false;
-				return;
-			}
-
-			if (event.key === 'Enter') {
-				event.preventDefault();
-				if (suggestedItemsSelected.value !== null && suggestedItems.value[suggestedItemsSelected.value]) {
-					addItemFromSuggestion(suggestedItems.value[suggestedItemsSelected.value]);
-					localInput.value = '';
-				} else if (createAllowed.value) {
-					addItemFromInput();
-				}
-				return;
-			}
-
-			if (event.key === 'ArrowUp' || (event.key === 'Tab' && event.shiftKey)) {
-				event.preventDefault();
-				if (suggestedItems.value.length < 1) return;
-				// Select previous from the list, if on top, then go last.
-				suggestedItemsSelected.value =
-					suggestedItemsSelected.value === null ||
-					suggestedItemsSelected.value < 1 ||
-					!suggestedItems.value[suggestedItemsSelected.value]
-						? suggestedItems.value.length - 1
-						: suggestedItemsSelected.value - 1;
-				return;
-			}
-
-			if (event.key === 'Tab') {
-				if (!menuActive.value) {
-					localInput.value = '';
-					return;
-				}
-
-				if (!localInput.value && suggestedItems.value.length < 1) return;
-			}
-
-			if (event.key === 'ArrowDown' || event.key === 'Tab') {
-				event.preventDefault();
-				if (suggestedItems.value.length < 1) return;
-				// Select next from the list, if bottom, then go first.
-				suggestedItemsSelected.value =
-					suggestedItemsSelected.value === null ||
-					suggestedItemsSelected.value >= suggestedItems.value.length - 1 ||
-					!suggestedItems.value[suggestedItemsSelected.value]
-						? 0
-						: suggestedItemsSelected.value + 1;
-				return;
-			}
-		}
-	},
+const createAllowed = computed(() => {
+	if (currentUser?.role.admin_access === true) return true;
+	if (!relationInfo.value || !props.allowCustom) return false;
+	return hasPermission(relationCollection, 'create') && hasPermission(junctionCollection, 'create');
 });
+
+const selectAllowed = computed(() => {
+	if (currentUser?.role.admin_access === true) return true;
+	if (!relationInfo.value) return false;
+	return hasPermission(junctionCollection, 'create');
+});
+
+const localInput = ref<string>('');
+const menuActive = ref<boolean>(false);
+const suggestedItems = ref<Record<string, any>[]>([]);
+const suggestedItemsSelected = ref<number | null>(null);
+const api = useApi();
+
+const referencingField = props.referencingField || relatedPrimaryKeyField;
+const fetchFields = [relatedPrimaryKeyField, referencingField];
+
+const { items, loading } = usePreviews(value);
+const sortedItems = computed(() => {
+	if (!junctionField) return items.value;
+	const sorted = clone(items.value).sort(
+		(a: Record<string, Record<string, any>>, b: Record<string, Record<string, any>>) => {
+			const aVal: string = a[junctionField][referencingField];
+			const bVal: string = b[junctionField][referencingField];
+			return props.sortDirection === 'desc'
+				? bVal.localeCompare(aVal.toString())
+				: aVal.localeCompare(bVal.toString());
+		}
+	);
+
+	return sorted;
+});
+
+const showAddCustom = computed(
+	() =>
+		createAllowed.value &&
+		localInput.value?.trim() &&
+		!itemValueAvailable(localInput.value) &&
+		!itemValueStaged(localInput.value)
+);
+
+watch(
+	localInput,
+	debounce((val: string) => {
+		refreshSuggestions(val);
+		menuActive.value = true;
+	}, 300)
+);
+
+function emitter(newVal: any[] | null) {
+	emit('input', newVal);
+}
+
+function deleteItem(item: any) {
+	if (value.value && !Array.isArray(value.value)) return;
+
+	if (junctionPrimaryKeyField in item) {
+		emitter(value.value.filter((x: any) => x !== item[junctionPrimaryKeyField]));
+	} else {
+		emitter(value.value.filter((x: any) => x !== item));
+	}
+}
+
+function addItemFromSuggestion(item: any) {
+	menuActive.value = false;
+	emitter([...(props.value || []), { [junctionField]: item }]);
+}
+
+async function addItemFromInput() {
+	const value = localInput.value?.trim();
+	if (!value || itemValueStaged(value)) return;
+
+	const cachedItem = suggestedItems.value.find((item) => item[referencingField] === value);
+	if (cachedItem) {
+		addItemFromSuggestion(cachedItem);
+		return;
+	}
+
+	try {
+		const item = await findByKeyword(value);
+		if (item) {
+			addItemFromSuggestion(item);
+		} else if (createAllowed.value) {
+			addItemFromSuggestion({ [referencingField]: value });
+		}
+		localInput.value = '';
+	} catch (err: any) {
+		window.console.warn(err);
+	}
+}
+
+function itemValueStaged(value: string): boolean {
+	if (!value) return false;
+	return !!items.value.find((item) => item[junctionField][referencingField] === value);
+}
+
+function itemValueAvailable(value: string): boolean {
+	if (!value) return false;
+	return !!suggestedItems.value.find((item) => item[referencingField] === value);
+}
+
+async function refreshSuggestions(keyword: string) {
+	suggestedItemsSelected.value = null;
+	if (!keyword || keyword.length < 1) {
+		suggestedItems.value = [];
+		return;
+	}
+	const filter = parseFilter(props.filter, null) || {};
+	const currentIds = items.value.map((i) => i[junctionField][relatedPrimaryKeyField]).filter((i) => !!i);
+	const query = {
+		params: {
+			limit: 10,
+			fields: fetchFields,
+			filter: {
+				[referencingField]: {
+					_contains: keyword,
+				},
+				...(currentIds.length > 0 && {
+					[relatedPrimaryKeyField]: {
+						_nin: currentIds.join(','),
+					},
+				}),
+				...filter,
+			},
+			sort: props.sortField
+				? props.sortDirection === 'desc'
+					? `-${props.sortField}`
+					: props.sortField
+				: `-${relatedPrimaryKeyField}`,
+		},
+	};
+	const response = await api.get(getEndpoint(relationCollection), query);
+	if (response?.data?.data && Array.isArray(response.data.data)) {
+		suggestedItems.value = response.data.data;
+	} else {
+		suggestedItems.value = [];
+	}
+}
+
+async function findByKeyword(keyword: string): Promise<Record<string, any> | null> {
+	const response = await api.get(getEndpoint(relationCollection), {
+		params: {
+			limit: 1,
+			fields: fetchFields,
+			filter: {
+				[referencingField]: {
+					_eq: keyword,
+				},
+			},
+		},
+	});
+
+	return response?.data?.data?.pop() || null;
+}
+
+function usePreviews(value: Ref<(number | string | Record<string, any>)[]>) {
+	const items = ref<any[]>([]);
+	const loading = ref<boolean>(!!value.value);
+	const relationalFetchFields = [
+		junctionPrimaryKeyField,
+		...fetchFields.map((field) => junctionField + '.' + field),
+	];
+
+	watch(
+		value,
+		debounce((value: (number | string | Record<string, any>)[]) => update(value), 300)
+	);
+
+	if (value.value && Array.isArray(value.value)) {
+		update(value.value);
+	}
+
+	return { items, loading };
+
+	async function update(value: (number | string | Record<string, any>)[]) {
+		const [ids, staged] = partition(
+			value || [],
+			(x: number | string | Record<string, any>) => typeof x !== 'object'
+		);
+
+		if (!ids.length) {
+			items.value = [...staged];
+			return;
+		}
+
+		const cached = items.value.filter(
+			(x: Record<string, any>) =>
+				typeof x === 'object' && x[junctionPrimaryKeyField] && ids.includes(x[junctionPrimaryKeyField])
+		);
+
+		if (cached.length === ids.length) {
+			items.value = [...cached, ...staged];
+			return;
+		}
+
+		loading.value = true;
+		const response = await api.get(getEndpoint(junctionCollection), {
+			params: {
+				fields: relationalFetchFields,
+				limit: ids.length,
+				filter: {
+					id: {
+						_in: ids,
+					},
+				},
+			},
+		});
+
+		if (response?.data?.data && Array.isArray(response.data.data)) {
+			items.value = [...response.data.data, ...staged];
+		} else {
+			items.value = [...staged];
+		}
+
+		loading.value = false;
+	}
+}
+
+async function onInputKeyDown(event: KeyboardEvent) {
+	if (event.key === 'Escape' && !menuActive.value && localInput.value) {
+		localInput.value = '';
+		return;
+	}
+
+	if (event.key === 'Escape') {
+		event.preventDefault();
+		menuActive.value = false;
+		return;
+	}
+
+	if (event.key === 'Enter') {
+		event.preventDefault();
+		if (suggestedItemsSelected.value !== null && suggestedItems.value[suggestedItemsSelected.value]) {
+			addItemFromSuggestion(suggestedItems.value[suggestedItemsSelected.value]);
+			localInput.value = '';
+		} else if (createAllowed.value) {
+			addItemFromInput();
+		}
+		return;
+	}
+
+	if (event.key === 'ArrowUp' || (event.key === 'Tab' && event.shiftKey)) {
+		event.preventDefault();
+		if (suggestedItems.value.length < 1) return;
+		// Select previous from the list, if on top, then go last.
+		suggestedItemsSelected.value =
+			suggestedItemsSelected.value === null ||
+			suggestedItemsSelected.value < 1 ||
+			!suggestedItems.value[suggestedItemsSelected.value]
+				? suggestedItems.value.length - 1
+				: suggestedItemsSelected.value - 1;
+		return;
+	}
+
+	if (event.key === 'Tab') {
+		if (!menuActive.value) {
+			localInput.value = '';
+			return;
+		}
+
+		if (!localInput.value && suggestedItems.value.length < 1) return;
+	}
+
+	if (event.key === 'ArrowDown' || event.key === 'Tab') {
+		event.preventDefault();
+		if (suggestedItems.value.length < 1) return;
+		// Select next from the list, if bottom, then go first.
+		suggestedItemsSelected.value =
+			suggestedItemsSelected.value === null ||
+			suggestedItemsSelected.value >= suggestedItems.value.length - 1 ||
+			!suggestedItems.value[suggestedItemsSelected.value]
+				? 0
+				: suggestedItemsSelected.value + 1;
+		return;
+	}
+}
 </script>
 
 <style scoped>
