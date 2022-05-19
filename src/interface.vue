@@ -3,7 +3,7 @@
 		{{ t('relationship_not_setup') }}
 	</v-notice>
 
-	<v-notice v-else-if="!referencingField" type="warning full">
+	<v-notice v-else-if="!props.referencingField" type="warning full">
 		<div>
 			<p>{{ t('display_template_not_setup') }}</p>
 			<ul>
@@ -59,7 +59,7 @@
 						@click="() => addItemFromSuggestion(item)"
 					>
 						<v-list-item-content>
-							{{ item[referencingField] }}
+							{{ item[props.referencingField] }}
 						</v-list-item-content>
 					</v-list-item>
 				</template>
@@ -77,7 +77,7 @@
 		<div v-else-if="sortedItems.length" class="tags">
 			<v-chip
 				v-for="item in sortedItems"
-				:key="item[junctionField][referencingField]"
+				:key="item[junctionField][props.referencingField]"
 				:disabled="disabled || !selectAllowed"
 				class="tag clickable"
 				small
@@ -86,7 +86,7 @@
 				v-tooltip="t('remove')"
 				@click="deleteItem(item)"
 			>
-				{{ item[junctionField][referencingField] }}
+				{{ item[junctionField][props.referencingField] }}
 			</v-chip>
 		</div>
 	</template>
@@ -111,7 +111,7 @@ const props = withDefaults(
 		disabled?: boolean;
 		allowCustom?: boolean;
 		filter?: Filter | null;
-		referencingField: string;
+		referencingField: string | null;
 		sortField?: string | null;
 		sortDirection?: string | null;
 		iconLeft?: string | null;
@@ -120,9 +120,8 @@ const props = withDefaults(
 	{
 		value: () => [],
 		disabled: false,
-		enableCreate: true,
-		enableSelect: true,
 		filter: () => null,
+		allowCustom: true,
 		sortDirection: 'desc',
 		iconRight: 'local_offer',
 	}
@@ -161,19 +160,24 @@ const suggestedItems = ref<Record<string, any>[]>([]);
 const suggestedItemsSelected = ref<number | null>(null);
 const api = useApi();
 
-const referencingField = props.referencingField || relatedPrimaryKeyField;
-const fetchFields = [relatedPrimaryKeyField, referencingField];
+const fetchFields = [relatedPrimaryKeyField];
+
+if (props.referencingField && props.referencingField !== relatedPrimaryKeyField) {
+	fetchFields.push(props.referencingField);
+}
 
 const { items, loading } = usePreviews(value);
 const sortedItems = computed(() => {
-	if (!junctionField) return items.value;
+	if (!junctionField || !props.referencingField) return items.value;
+
 	const sorted = clone(items.value).sort(
 		(a: Record<string, Record<string, any>>, b: Record<string, Record<string, any>>) => {
-			const aVal: string = a[junctionField][referencingField];
-			const bVal: string = b[junctionField][referencingField];
+			const aVal: string = a[junctionField][props.referencingField]?.toString() || '';
+			const bVal: string = b[junctionField][props.referencingField]?.toString() || '';
+
 			return props.sortDirection === 'desc'
-				? bVal.localeCompare(aVal.toString())
-				: aVal.localeCompare(bVal.toString());
+				? bVal.localeCompare(aVal)
+				: aVal.localeCompare(bVal);
 		}
 	);
 
@@ -216,10 +220,12 @@ function addItemFromSuggestion(item: any) {
 }
 
 async function addItemFromInput() {
+	if (!props.referencingField) return;
+
 	const value = localInput.value?.trim();
 	if (!value || itemValueStaged(value)) return;
 
-	const cachedItem = suggestedItems.value.find((item) => item[referencingField] === value);
+	const cachedItem = suggestedItems.value.find((item) => item[props.referencingField] === value);
 	if (cachedItem) {
 		addItemFromSuggestion(cachedItem);
 		return;
@@ -230,7 +236,7 @@ async function addItemFromInput() {
 		if (item) {
 			addItemFromSuggestion(item);
 		} else if (createAllowed.value) {
-			addItemFromSuggestion({ [referencingField]: value });
+			addItemFromSuggestion({ [props.referencingField]: value });
 		}
 		localInput.value = '';
 	} catch (err: any) {
@@ -239,13 +245,13 @@ async function addItemFromInput() {
 }
 
 function itemValueStaged(value: string): boolean {
-	if (!value) return false;
-	return !!items.value.find((item) => item[junctionField][referencingField] === value);
+	if (!value || !props.referencingField) return false;
+	return !!items.value.find((item) => item[junctionField][props.referencingField] === value);
 }
 
 function itemValueAvailable(value: string): boolean {
-	if (!value) return false;
-	return !!suggestedItems.value.find((item) => item[referencingField] === value);
+	if (!value || !props.referencingField) return false;
+	return !!suggestedItems.value.find((item) => item[props.referencingField] === value);
 }
 
 async function refreshSuggestions(keyword: string) {
@@ -254,22 +260,26 @@ async function refreshSuggestions(keyword: string) {
 		suggestedItems.value = [];
 		return;
 	}
-	const filter = parseFilter(props.filter, null) || {};
+
 	const currentIds = items.value.map((i) => i[junctionField][relatedPrimaryKeyField]).filter((i) => !!i);
 	const query = {
 		params: {
 			limit: 10,
 			fields: fetchFields,
 			filter: {
-				[referencingField]: {
-					_contains: keyword,
-				},
-				...(currentIds.length > 0 && {
-					[relatedPrimaryKeyField]: {
-						_nin: currentIds.join(','),
+				_and: [
+					parseFilter(props.filter, null) || {},
+					(currentIds.length > 0 && {
+						[relatedPrimaryKeyField]: {
+							_nin: currentIds.join(','),
+						},
+					}),
+					{
+						[props.referencingField]: {
+							_contains: keyword,
+						},
 					},
-				}),
-				...filter,
+				]
 			},
 			sort: props.sortField
 				? props.sortDirection === 'desc'
@@ -278,6 +288,7 @@ async function refreshSuggestions(keyword: string) {
 				: `-${relatedPrimaryKeyField}`,
 		},
 	};
+
 	const response = await api.get(getEndpoint(relationCollection), query);
 	if (response?.data?.data && Array.isArray(response.data.data)) {
 		suggestedItems.value = response.data.data;
@@ -292,7 +303,7 @@ async function findByKeyword(keyword: string): Promise<Record<string, any> | nul
 			limit: 1,
 			fields: fetchFields,
 			filter: {
-				[referencingField]: {
+				[props.referencingField]: {
 					_eq: keyword,
 				},
 			},
