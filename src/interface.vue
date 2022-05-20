@@ -264,13 +264,14 @@ async function refreshSuggestions(keyword: string) {
 	const currentIds = items.value
 		.map((i) => i[relationInfo.value.junctionField.field][relationInfo.value.relatedPrimaryKeyField.field])
 		.filter((i) => !!i);
+
 	const query = {
 		params: {
 			limit: 10,
 			fields: fetchFields,
 			filter: {
 				_and: [
-					parseFilter(props.filter, null) || null,
+					props.filter && parseFilter(props.filter, null),
 					currentIds.length > 0 && {
 						[relationInfo.value.relatedPrimaryKeyField.field]: {
 							_nin: currentIds.join(','),
