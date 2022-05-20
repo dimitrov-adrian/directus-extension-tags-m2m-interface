@@ -1,6 +1,6 @@
 <template>
 	<v-notice
-		v-if="!relationInfo.junctionCollection.collection || !relationInfo.relatedCollection.collection"
+		v-if="!relationInfo || !relationInfo.junctionCollection.collection || !relationInfo.relatedCollection.collection"
 		type="warning"
 	>
 		{{ t('relationship_not_setup') }}
@@ -162,15 +162,15 @@ const suggestedItems = ref<Record<string, any>[]>([]);
 const suggestedItemsSelected = ref<number | null>(null);
 const api = useApi();
 
-const fetchFields = [relationInfo.value.relatedPrimaryKeyField.field];
+const fetchFields = [relationInfo.value?.relatedPrimaryKeyField.field];
 
-if (props.referencingField && props.referencingField !== relationInfo.value.relatedPrimaryKeyField.field) {
+if (props.referencingField && props.referencingField !== relationInfo.value?.relatedPrimaryKeyField.field) {
 	fetchFields.push(props.referencingField);
 }
 
 const { items, loading } = usePreviews(value);
 const sortedItems = computed(() => {
-	if (!relationInfo.value.junctionField.field || !props.referencingField) return items.value;
+	if (!relationInfo.value?.junctionField?.field || !props.referencingField) return items.value;
 
 	const sorted = clone(items.value).sort(
 		(a: Record<string, Record<string, any>>, b: Record<string, Record<string, any>>) => {
@@ -318,6 +318,9 @@ async function findByKeyword(keyword: string): Promise<Record<string, any> | nul
 function usePreviews(value: Ref<RelationItem[]>) {
 	const items = ref<any[]>([]);
 	const loading = ref<boolean>(value.value && value.value.length > 0);
+
+	if (!relationInfo.value) return { items, loading };
+
 	const relationalFetchFields = [
 		relationInfo.value.junctionPrimaryKeyField.field,
 		...fetchFields.map((field) => relationInfo.value.junctionField.field + '.' + field),
