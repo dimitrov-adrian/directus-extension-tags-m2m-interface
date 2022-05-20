@@ -1,5 +1,8 @@
 <template>
-	<v-notice v-if="!junctionCollection || !relationCollection" type="warning">
+	<v-notice
+		v-if="!relationInfo.junctionCollection.collection || !relationInfo.relatedCollection.collection"
+		type="warning"
+	>
 		{{ t('relationship_not_setup') }}
 	</v-notice>
 
@@ -36,7 +39,7 @@
 				</v-input>
 			</template>
 
-			<v-list v-if="showAddCustom || suggestedItems.length">
+			<v-list v-if="!disabled && (showAddCustom || suggestedItems.length)">
 				<v-list-item v-if="showAddCustom" clickable @click="addItemFromInput">
 					<v-list-item-content class="add-custom" v-tooltip="t('interfaces.tags.add_tags')">
 						{{
@@ -53,7 +56,7 @@
 				<template v-if="suggestedItems.length">
 					<v-list-item
 						v-for="(item, index) in suggestedItems"
-						:key="item[relatedPrimaryKeyField]"
+						:key="item[relationInfo.relatedPrimaryKeyField.field]"
 						:active="index === suggestedItemsSelected"
 						clickable
 						@click="() => addItemFromSuggestion(item)"
@@ -65,7 +68,7 @@
 				</template>
 			</v-list>
 
-			<v-list v-else-if="localInput && !createAllowed">
+			<v-list v-else-if="!disabled && localInput && !createAllowed">
 				<v-list-item class="no-items">
 					{{ t('no_items') }}
 				</v-list-item>
@@ -77,7 +80,7 @@
 		<div v-else-if="sortedItems.length" class="tags">
 			<v-chip
 				v-for="item in sortedItems"
-				:key="item[junctionField][props.referencingField]"
+				:key="item[relationInfo.junctionField.field][props.referencingField]"
 				:disabled="disabled || !selectAllowed"
 				class="tag clickable"
 				small
@@ -86,7 +89,7 @@
 				v-tooltip="t('remove')"
 				@click="deleteItem(item)"
 			>
-				{{ item[junctionField][props.referencingField] }}
+				{{ item[relationInfo.junctionField.field][props.referencingField] }}
 			</v-chip>
 		</div>
 	</template>
@@ -101,9 +104,11 @@ import { useApi, useStores } from '@directus/shared/composables';
 import { parseFilter, getEndpoint } from '@directus/shared/utils';
 import { useRelationM2M } from './use-relations';
 
+type RelationItem = number | string | Record<string, any>;
+
 const props = withDefaults(
 	defineProps<{
-		value?: (number | string | Record<string, any>)[];
+		value?: RelationItem[];
 		primaryKey: string | number;
 		collection: string;
 		field: string;
@@ -136,22 +141,19 @@ const { usePermissionsStore, useUserStore } = useStores();
 const { currentUser } = useUserStore();
 const { hasPermission } = usePermissionsStore();
 
-const relationCollection = relationInfo.value.relatedCollection.collection;
-const relatedPrimaryKeyField = relationInfo.value.relatedPrimaryKeyField.field;
-const junctionCollection = relationInfo.value.junctionCollection.collection;
-const junctionField = relationInfo.value.junctionField.field;
-const junctionPrimaryKeyField = relationInfo.value.junctionPrimaryKeyField.field;
-
 const createAllowed = computed(() => {
 	if (currentUser?.role.admin_access === true) return true;
 	if (!relationInfo.value || !props.allowCustom) return false;
-	return hasPermission(relationCollection, 'create') && hasPermission(junctionCollection, 'create');
+	return (
+		hasPermission(relationInfo.value.relatedCollection.collection, 'create') &&
+		hasPermission(relationInfo.value.junctionCollection.collection, 'create')
+	);
 });
 
 const selectAllowed = computed(() => {
 	if (currentUser?.role.admin_access === true) return true;
 	if (!relationInfo.value) return false;
-	return hasPermission(junctionCollection, 'create');
+	return hasPermission(relationInfo.value.junctionCollection.collection, 'create');
 });
 
 const localInput = ref<string>('');
@@ -160,24 +162,22 @@ const suggestedItems = ref<Record<string, any>[]>([]);
 const suggestedItemsSelected = ref<number | null>(null);
 const api = useApi();
 
-const fetchFields = [relatedPrimaryKeyField];
+const fetchFields = [relationInfo.value.relatedPrimaryKeyField.field];
 
-if (props.referencingField && props.referencingField !== relatedPrimaryKeyField) {
+if (props.referencingField && props.referencingField !== relationInfo.value.relatedPrimaryKeyField.field) {
 	fetchFields.push(props.referencingField);
 }
 
 const { items, loading } = usePreviews(value);
 const sortedItems = computed(() => {
-	if (!junctionField || !props.referencingField) return items.value;
+	if (!relationInfo.value.junctionField.field || !props.referencingField) return items.value;
 
 	const sorted = clone(items.value).sort(
 		(a: Record<string, Record<string, any>>, b: Record<string, Record<string, any>>) => {
-			const aVal: string = a[junctionField][props.referencingField]?.toString() || '';
-			const bVal: string = b[junctionField][props.referencingField]?.toString() || '';
+			const aVal: string = a[relationInfo.value.junctionField.field][props.referencingField]?.toString() || '';
+			const bVal: string = b[relationInfo.value.junctionField.field][props.referencingField]?.toString() || '';
 
-			return props.sortDirection === 'desc'
-				? bVal.localeCompare(aVal)
-				: aVal.localeCompare(bVal);
+			return props.sortDirection === 'desc' ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
 		}
 	);
 
@@ -207,8 +207,8 @@ function emitter(newVal: any[] | null) {
 function deleteItem(item: any) {
 	if (value.value && !Array.isArray(value.value)) return;
 
-	if (junctionPrimaryKeyField in item) {
-		emitter(value.value.filter((x: any) => x !== item[junctionPrimaryKeyField]));
+	if (relationInfo.value.junctionPrimaryKeyField.field in item) {
+		emitter(value.value.filter((x: any) => x !== item[relationInfo.value.junctionPrimaryKeyField.field]));
 	} else {
 		emitter(value.value.filter((x: any) => x !== item));
 	}
@@ -216,7 +216,7 @@ function deleteItem(item: any) {
 
 function addItemFromSuggestion(item: any) {
 	menuActive.value = false;
-	emitter([...(props.value || []), { [junctionField]: item }]);
+	emitter([...(props.value || []), { [relationInfo.value.junctionField.field]: item }]);
 }
 
 async function addItemFromInput() {
@@ -246,7 +246,7 @@ async function addItemFromInput() {
 
 function itemValueStaged(value: string): boolean {
 	if (!value || !props.referencingField) return false;
-	return !!items.value.find((item) => item[junctionField][props.referencingField] === value);
+	return !!items.value.find((item) => item[relationInfo.value.junctionField.field][props.referencingField] === value);
 }
 
 function itemValueAvailable(value: string): boolean {
@@ -261,35 +261,37 @@ async function refreshSuggestions(keyword: string) {
 		return;
 	}
 
-	const currentIds = items.value.map((i) => i[junctionField][relatedPrimaryKeyField]).filter((i) => !!i);
+	const currentIds = items.value
+		.map((i) => i[relationInfo.value.junctionField.field][relationInfo.value.relatedPrimaryKeyField.field])
+		.filter((i) => !!i);
 	const query = {
 		params: {
 			limit: 10,
 			fields: fetchFields,
 			filter: {
 				_and: [
-					parseFilter(props.filter, null) || {},
-					(currentIds.length > 0 && {
-						[relatedPrimaryKeyField]: {
+					parseFilter(props.filter, null) || null,
+					currentIds.length > 0 && {
+						[relationInfo.value.relatedPrimaryKeyField.field]: {
 							_nin: currentIds.join(','),
 						},
-					}),
+					},
 					{
 						[props.referencingField]: {
 							_contains: keyword,
 						},
 					},
-				]
+				].filter((x) => !!x),
 			},
 			sort: props.sortField
 				? props.sortDirection === 'desc'
 					? `-${props.sortField}`
 					: props.sortField
-				: `-${relatedPrimaryKeyField}`,
+				: `-${relationInfo.value.relatedPrimaryKeyField.field}`,
 		},
 	};
 
-	const response = await api.get(getEndpoint(relationCollection), query);
+	const response = await api.get(getEndpoint(relationInfo.value.relatedCollection.collection), query);
 	if (response?.data?.data && Array.isArray(response.data.data)) {
 		suggestedItems.value = response.data.data;
 	} else {
@@ -298,7 +300,7 @@ async function refreshSuggestions(keyword: string) {
 }
 
 async function findByKeyword(keyword: string): Promise<Record<string, any> | null> {
-	const response = await api.get(getEndpoint(relationCollection), {
+	const response = await api.get(getEndpoint(relationInfo.value.relatedCollection.collection), {
 		params: {
 			limit: 1,
 			fields: fetchFields,
@@ -313,17 +315,17 @@ async function findByKeyword(keyword: string): Promise<Record<string, any> | nul
 	return response?.data?.data?.pop() || null;
 }
 
-function usePreviews(value: Ref<(number | string | Record<string, any>)[]>) {
+function usePreviews(value: Ref<RelationItem[]>) {
 	const items = ref<any[]>([]);
-	const loading = ref<boolean>(!!value.value);
+	const loading = ref<boolean>(value.value && value.value.length > 0);
 	const relationalFetchFields = [
-		junctionPrimaryKeyField,
-		...fetchFields.map((field) => junctionField + '.' + field),
+		relationInfo.value.junctionPrimaryKeyField.field,
+		...fetchFields.map((field) => relationInfo.value.junctionField.field + '.' + field),
 	];
 
 	watch(
 		value,
-		debounce((value: (number | string | Record<string, any>)[]) => update(value), 300)
+		debounce((value: RelationItem[]) => update(value), 300)
 	);
 
 	if (value.value && Array.isArray(value.value)) {
@@ -332,11 +334,8 @@ function usePreviews(value: Ref<(number | string | Record<string, any>)[]>) {
 
 	return { items, loading };
 
-	async function update(value: (number | string | Record<string, any>)[]) {
-		const [ids, staged] = partition(
-			value || [],
-			(x: number | string | Record<string, any>) => typeof x !== 'object'
-		);
+	async function update(value: RelationItem[]) {
+		const [ids, staged] = partition(value || [], (x: RelationItem) => typeof x !== 'object');
 
 		if (!ids.length) {
 			items.value = [...staged];
@@ -345,7 +344,9 @@ function usePreviews(value: Ref<(number | string | Record<string, any>)[]>) {
 
 		const cached = items.value.filter(
 			(x: Record<string, any>) =>
-				typeof x === 'object' && x[junctionPrimaryKeyField] && ids.includes(x[junctionPrimaryKeyField])
+				typeof x === 'object' &&
+				x[relationInfo.value.junctionPrimaryKeyField.field] &&
+				ids.includes(x[relationInfo.value.junctionPrimaryKeyField.field])
 		);
 
 		if (cached.length === ids.length) {
@@ -354,7 +355,7 @@ function usePreviews(value: Ref<(number | string | Record<string, any>)[]>) {
 		}
 
 		loading.value = true;
-		const response = await api.get(getEndpoint(junctionCollection), {
+		const response = await api.get(getEndpoint(relationInfo.value.junctionCollection.collection), {
 			params: {
 				fields: relationalFetchFields,
 				limit: ids.length,
