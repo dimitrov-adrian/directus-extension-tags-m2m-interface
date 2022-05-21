@@ -40,7 +40,7 @@
 			</template>
 
 			<v-list v-if="!disabled && (showAddCustom || suggestedItems.length)">
-				<v-list-item v-if="showAddCustom" clickable @click="addItemFromInput">
+				<v-list-item v-if="showAddCustom" clickable @click="stageLocalInput">
 					<v-list-item-content class="add-custom" v-tooltip="t('interfaces.tags.add_tags')">
 						{{
 							t('field_in_collection', {
@@ -59,7 +59,7 @@
 						:key="item[relationInfo.relatedPrimaryKeyField.field]"
 						:active="index === suggestedItemsSelected"
 						clickable
-						@click="() => addItemFromSuggestion(item)"
+						@click="() => stageItemObject(item)"
 					>
 						<v-list-item-content>
 							{{ item[props.referencingField] }}
@@ -104,7 +104,7 @@ import { useApi, useStores } from '@directus/shared/composables';
 import { parseFilter, getEndpoint } from '@directus/shared/utils';
 import { useRelationM2M } from './use-relations';
 
-type RelationItem = number | string | Record<string, any>;
+type RelationItem = number | BigInt | string | Record<string, any>;
 
 const props = withDefaults(
 	defineProps<{
@@ -163,7 +163,6 @@ const suggestedItemsSelected = ref<number | null>(null);
 const api = useApi();
 
 const fetchFields = [relationInfo.value?.relatedPrimaryKeyField.field];
-
 if (props.referencingField && props.referencingField !== relationInfo.value?.relatedPrimaryKeyField.field) {
 	fetchFields.push(props.referencingField);
 }
@@ -194,14 +193,14 @@ const showAddCustom = computed(
 
 watch(
 	localInput,
-	debounce((val: string) => {
-		refreshSuggestions(val);
-		menuActive.value = true;
+	debounce((newValue: string) => {
+		menuActive.value = !!newValue;
+		refreshSuggestions(newValue);
 	}, 300)
 );
 
-function emitter(newVal: any[] | null) {
-	emit('input', newVal);
+function emitter(newValue: RelationItem[] | null) {
+	emit('input', newValue);
 }
 
 function deleteItem(item: any) {
@@ -214,12 +213,12 @@ function deleteItem(item: any) {
 	}
 }
 
-function addItemFromSuggestion(item: any) {
-	menuActive.value = false;
+function stageItemObject(item: Record<string, any>) {
+	localInput.value = '';
 	emitter([...(props.value || []), { [relationInfo.value.junctionField.field]: item }]);
 }
 
-async function addItemFromInput() {
+async function stageLocalInput() {
 	if (!props.referencingField) return;
 
 	const value = localInput.value?.trim();
@@ -227,18 +226,17 @@ async function addItemFromInput() {
 
 	const cachedItem = suggestedItems.value.find((item) => item[props.referencingField] === value);
 	if (cachedItem) {
-		addItemFromSuggestion(cachedItem);
+		stageItemObject(cachedItem);
 		return;
 	}
 
 	try {
 		const item = await findByKeyword(value);
 		if (item) {
-			addItemFromSuggestion(item);
+			stageItemObject(item);
 		} else if (createAllowed.value) {
-			addItemFromSuggestion({ [props.referencingField]: value });
+			stageItemObject({ [props.referencingField]: value });
 		}
-		localInput.value = '';
 	} catch (err: any) {
 		window.console.warn(err);
 	}
@@ -262,33 +260,40 @@ async function refreshSuggestions(keyword: string) {
 	}
 
 	const currentIds = items.value
-		.map((i) => i[relationInfo.value.junctionField.field][relationInfo.value.relatedPrimaryKeyField.field])
-		.filter((i) => !!i);
+		.map(
+			(x: RelationItem): string | number | BigInt =>
+				x[relationInfo.value.junctionField.field][relationInfo.value.relatedPrimaryKeyField.field]
+		)
+		.filter((x: string | number | BigInt) => x === 0 || !!x);
+
+	const filters = [
+		props.filter && parseFilter(props.filter, null),
+		currentIds.length > 0 && {
+			[relationInfo.value.relatedPrimaryKeyField.field]: {
+				_nin: currentIds.join(','),
+			},
+		},
+		{
+			[props.referencingField]: {
+				_contains: keyword,
+			},
+		},
+	].filter(Boolean);
+
+	const sort = props.sortField
+		? props.sortDirection === 'desc'
+			? `-${props.sortField}`
+			: props.sortField
+		: `-${relationInfo.value.relatedPrimaryKeyField.field}`;
 
 	const query = {
 		params: {
 			limit: 10,
 			fields: fetchFields,
 			filter: {
-				_and: [
-					props.filter && parseFilter(props.filter, null),
-					currentIds.length > 0 && {
-						[relationInfo.value.relatedPrimaryKeyField.field]: {
-							_nin: currentIds.join(','),
-						},
-					},
-					{
-						[props.referencingField]: {
-							_contains: keyword,
-						},
-					},
-				].filter((x) => !!x),
+				_and: filters,
 			},
-			sort: props.sortField
-				? props.sortDirection === 'desc'
-					? `-${props.sortField}`
-					: props.sortField
-				: `-${relationInfo.value.relatedPrimaryKeyField.field}`,
+			sort,
 		},
 	};
 
@@ -347,7 +352,7 @@ function usePreviews(value: Ref<RelationItem[]>) {
 		}
 
 		const cached = items.value.filter(
-			(x: Record<string, any>) =>
+			(x: RelationItem) =>
 				typeof x === 'object' &&
 				x[relationInfo.value.junctionPrimaryKeyField.field] &&
 				ids.includes(x[relationInfo.value.junctionPrimaryKeyField.field])
@@ -396,10 +401,9 @@ async function onInputKeyDown(event: KeyboardEvent) {
 	if (event.key === 'Enter') {
 		event.preventDefault();
 		if (suggestedItemsSelected.value !== null && suggestedItems.value[suggestedItemsSelected.value]) {
-			addItemFromSuggestion(suggestedItems.value[suggestedItemsSelected.value]);
-			localInput.value = '';
+			stageItemObject(suggestedItems.value[suggestedItemsSelected.value]);
 		} else if (createAllowed.value) {
-			addItemFromInput();
+			stageLocalInput();
 		}
 		return;
 	}
