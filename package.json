@@ -1,6 +1,6 @@
 {
   "name": "directus-extension-tags-m2m-interface",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "author": {
     "email": "dimitrov.adrian+gh@gmail.com",
     "name": "Adrian Dimitrov"
@@ -37,10 +37,10 @@
     "dev": "directus-extension build -w --no-minify --sourcemap"
   },
   "devDependencies": {
-    "@directus/extensions-sdk": "^9.10.0",
+    "@directus/extensions-sdk": "^9.11.0",
     "directus-codestyle": "https://github.com/dimitrov-adrian/directus-codestyle.git",
     "lodash": "^4.17.21",
-    "typescript": "^4.6.4"
+    "typescript": "^4.7.2"
   },
   "prettier": "directus-codestyle/prettier",
   "stylelint": {
