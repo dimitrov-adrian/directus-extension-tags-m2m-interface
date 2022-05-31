@@ -77,9 +77,9 @@
 
 		<v-skeleton-loader v-if="loading" type="block-list-item" />
 
-		<div v-else-if="sortedItems.length" class="tags">
+		<div v-else-if="items.length" class="tags">
 			<v-chip
-				v-for="item in sortedItems"
+				v-for="item in items"
 				:key="item[relationInfo.junctionField.field][props.referencingField]"
 				:disabled="disabled || !selectAllowed"
 				class="tag clickable"
@@ -98,13 +98,14 @@
 <script lang="ts" setup>
 import { computed, ref, toRefs, Ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { clone, debounce, partition } from 'lodash';
+import { debounce, partition } from 'lodash';
 import { Filter } from '@directus/shared/types';
 import { useApi, useStores } from '@directus/shared/composables';
 import { parseFilter, getEndpoint } from '@directus/shared/utils';
 import { useRelationM2M } from './use-relations';
 
-type RelationItem = number | BigInt | string | Record<string, any>;
+type RelationFK = string | number | BigInt;
+type RelationItem = RelationFK | Record<string, any>;
 
 const props = withDefaults(
 	defineProps<{
@@ -168,20 +169,6 @@ if (props.referencingField && props.referencingField !== relationInfo.value?.rel
 }
 
 const { items, loading } = usePreviews(value);
-const sortedItems = computed(() => {
-	if (!relationInfo.value?.junctionField?.field || !props.referencingField) return items.value;
-
-	const sorted = clone(items.value).sort(
-		(a: Record<string, Record<string, any>>, b: Record<string, Record<string, any>>) => {
-			const aVal: string = a[relationInfo.value.junctionField.field][props.referencingField]?.toString() || '';
-			const bVal: string = b[relationInfo.value.junctionField.field][props.referencingField]?.toString() || '';
-
-			return props.sortDirection === 'desc' ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
-		}
-	);
-
-	return sorted;
-});
 
 const showAddCustom = computed(
 	() =>
@@ -213,7 +200,7 @@ function deleteItem(item: any) {
 	}
 }
 
-function stageItemObject(item: Record<string, any>) {
+function stageItemObject(item: Record<string, RelationItem>) {
 	localInput.value = '';
 	emitter([...(props.value || []), { [relationInfo.value.junctionField.field]: item }]);
 }
@@ -261,10 +248,10 @@ async function refreshSuggestions(keyword: string) {
 
 	const currentIds = items.value
 		.map(
-			(x: RelationItem): string | number | BigInt =>
-				x[relationInfo.value.junctionField.field][relationInfo.value.relatedPrimaryKeyField.field]
+			(item: RelationItem): RelationFK =>
+				item[relationInfo.value.junctionField.field][relationInfo.value.relatedPrimaryKeyField.field]
 		)
-		.filter((x: string | number | BigInt) => x === 0 || !!x);
+		.filter((id: RelationFK) => id === 0 || !!id);
 
 	const filters = [
 		props.filter && parseFilter(props.filter, null),
@@ -280,12 +267,6 @@ async function refreshSuggestions(keyword: string) {
 		},
 	].filter(Boolean);
 
-	const sort = props.sortField
-		? props.sortDirection === 'desc'
-			? `-${props.sortField}`
-			: props.sortField
-		: `-${relationInfo.value.relatedPrimaryKeyField.field}`;
-
 	const query = {
 		params: {
 			limit: 10,
@@ -293,7 +274,7 @@ async function refreshSuggestions(keyword: string) {
 			filter: {
 				_and: filters,
 			},
-			sort,
+			...getSortingQuery(),
 		},
 	};
 
@@ -344,7 +325,7 @@ function usePreviews(value: Ref<RelationItem[]>) {
 	return { items, loading };
 
 	async function update(value: RelationItem[]) {
-		const [ids, staged] = partition(value || [], (x: RelationItem) => typeof x !== 'object');
+		const [ids, staged] = partition(value || [], (item: RelationItem) => typeof item !== 'object');
 
 		if (!ids.length) {
 			items.value = [...staged];
@@ -352,10 +333,10 @@ function usePreviews(value: Ref<RelationItem[]>) {
 		}
 
 		const cached = items.value.filter(
-			(x: RelationItem) =>
-				typeof x === 'object' &&
-				x[relationInfo.value.junctionPrimaryKeyField.field] &&
-				ids.includes(x[relationInfo.value.junctionPrimaryKeyField.field])
+			(item: RelationItem) =>
+				typeof item === 'object' &&
+				item[relationInfo.value.junctionPrimaryKeyField.field] &&
+				ids.includes(item[relationInfo.value.junctionPrimaryKeyField.field])
 		);
 
 		if (cached.length === ids.length) {
@@ -373,6 +354,7 @@ function usePreviews(value: Ref<RelationItem[]>) {
 						_in: ids,
 					},
 				},
+				...getSortingQuery(relationInfo.value.junctionField.field),
 			},
 		});
 
@@ -384,6 +366,14 @@ function usePreviews(value: Ref<RelationItem[]>) {
 
 		loading.value = false;
 	}
+}
+
+function getSortingQuery(path?: string): Object {
+	const fieldName = props.sortField ? props.sortField : relationInfo.value.relatedPrimaryKeyField.field;
+	const field = path ? `${path}.${fieldName}` : fieldName;
+	return {
+		sort: props.sortDirection === 'desc' ? `-${field}` : field,
+	};
 }
 
 async function onInputKeyDown(event: KeyboardEvent) {
