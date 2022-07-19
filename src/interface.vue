@@ -116,6 +116,7 @@ const props = withDefaults(
 		placeholder?: string | null;
 		disabled?: boolean;
 		allowCustom?: boolean;
+		allowMultiple?: boolean;
 		filter?: Filter | null;
 		referencingField: string | null;
 		sortField?: string | null;
@@ -201,7 +202,6 @@ function deleteItem(item: any) {
 }
 
 function stageItemObject(item: Record<string, RelationItem>) {
-	localInput.value = '';
 	emitter([...(props.value || []), { [relationInfo.value.junctionField.field]: item }]);
 }
 
@@ -209,7 +209,23 @@ async function stageLocalInput() {
 	if (!props.referencingField) return;
 
 	const value = localInput.value?.trim();
+	if (props.allowMultiple) {
+		for (const valueTag of value
+			.split(/[;,\s]/)
+			.map((x) => x.trim())
+			.filter((x) => !!x)) {
+			await stageValue(valueTag.trim());
+		}
+	} else {
+		await stageValue(value);
+	}
+
+	localInput.value = '';
+}
+
+async function stageValue(value: string) {
 	if (!value || itemValueStaged(value)) return;
+	console.log('=>', value);
 
 	const cachedItem = suggestedItems.value.find((item) => item[props.referencingField] === value);
 	if (cachedItem) {

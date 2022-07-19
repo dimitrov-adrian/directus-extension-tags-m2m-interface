@@ -79,6 +79,21 @@ export default defineInterface({
 				},
 			},
 			{
+				field: 'allowMultiple',
+				name: '$t:allow_multiple',
+				type: 'boolean',
+				meta: {
+					width: 'half',
+					interface: 'boolean',
+					options: {
+						label: 'Separate by [Space] [,] and [;]',
+					},
+				},
+				schema: {
+					default_value: false,
+				},
+			},
+			{
 				field: 'filter',
 				name: '$t:filter',
 				type: 'json',
