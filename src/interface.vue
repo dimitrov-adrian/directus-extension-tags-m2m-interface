@@ -45,7 +45,7 @@
 						{{
 							t('field_in_collection', {
 								field: localInput,
-								collection: t('create_item'),
+								collection: isMulti ? t('select_all') : t('create_item'),
 							})
 						}}
 					</v-list-item-content>
@@ -118,7 +118,7 @@ const props = withDefaults(
 		allowCustom?: boolean;
 		allowMultiple?: boolean;
 		filter?: Filter | null;
-		referencingField: string | null;
+		referencingField: string;
 		sortField?: string | null;
 		sortDirection?: string | null;
 		iconLeft?: string | null;
@@ -179,6 +179,8 @@ const showAddCustom = computed(
 		!itemValueStaged(localInput.value)
 );
 
+const isMulti = computed(() => props.allowMultiple && fromSeparatedTag(localInput.value));
+
 watch(
 	localInput,
 	debounce((newValue: string) => {
@@ -209,23 +211,24 @@ async function stageLocalInput() {
 	if (!props.referencingField) return;
 
 	const value = localInput.value?.trim();
-	if (props.allowMultiple) {
-		for (const valueTag of value
-			.split(/[;,\s]/)
-			.map((x) => x.trim())
-			.filter((x) => !!x)) {
-			await stageValue(valueTag.trim());
-		}
-	} else {
-		await stageValue(value);
+	for (const valueTag of fromSeparatedTag(value)) {
+		await stageValue(valueTag.trim());
 	}
 
 	localInput.value = '';
 }
 
+function fromSeparatedTag(input: string): string[] {
+	if (!props.allowMultiple) return [input];
+
+	return input
+		.split(/[;,]/)
+		.map((x) => x.trim())
+		.filter((x) => !!x);
+}
+
 async function stageValue(value: string) {
 	if (!value || itemValueStaged(value)) return;
-	console.log('=>', value);
 
 	const cachedItem = suggestedItems.value.find((item) => item[props.referencingField] === value);
 	if (cachedItem) {
@@ -277,9 +280,13 @@ async function refreshSuggestions(keyword: string) {
 			},
 		},
 		{
-			[props.referencingField]: {
-				_contains: keyword,
-			},
+			_or: fromSeparatedTag(keyword).map((value) => {
+				return {
+					[props.referencingField]: {
+						_contains: value,
+					},
+				};
+			}),
 		},
 	].filter(Boolean);
 
@@ -392,6 +399,10 @@ function getSortingQuery(path?: string): Object {
 	};
 }
 
+/**
+ * Keyboard shortcuts and keybindings
+ * @param {KeyboardEvent} event
+ */
 async function onInputKeyDown(event: KeyboardEvent) {
 	if (event.key === 'Escape' && !menuActive.value && localInput.value) {
 		localInput.value = '';

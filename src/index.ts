@@ -86,7 +86,7 @@ export default defineInterface({
 					width: 'half',
 					interface: 'boolean',
 					options: {
-						label: 'Separate by [Space] [,] and [;]',
+						label: 'Separated by ; and ,',
 					},
 				},
 				schema: {

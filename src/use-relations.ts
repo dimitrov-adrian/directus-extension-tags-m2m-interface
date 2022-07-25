@@ -1,4 +1,12 @@
-// Copied from https://github.com/directus/directus/blob/main/app/src/composables/use-relation/use-relation-m2m.ts
+/**
+ * @file
+ * Local version of use-relations-m2m because the original one is
+ * not available through composables.
+ *
+ * Patched useRelationM2M() to support stores passing from the interface
+ *
+ * @see https://github.com/directus/directus/blob/main/app/src/composables/use-relation-m2m.ts
+ */
 
 import { computed, Ref } from 'vue';
 import { Field, Relation, Collection } from '@directus/shared/types';
@@ -16,8 +24,10 @@ export type RelationM2M = {
 	type: 'm2m';
 };
 
-export function useRelationM2M(collection: Ref<string>, field: Ref<string>, stores: Record<string, any>) {
-	const { useCollectionsStore, useRelationsStore, useFieldsStore } = stores;
+export function useRelationM2M(collection: Ref<string>, field: Ref<string>, patchedFnParamStores: Record<string, any>) {
+	// Patch to support stores from parameter.
+	const { useCollectionsStore, useRelationsStore, useFieldsStore } = patchedFnParamStores;
+
 	const relationsStore = useRelationsStore();
 	const collectionsStore = useCollectionsStore();
 	const fieldsStore = useFieldsStore();
