@@ -20,7 +20,7 @@
 	</v-notice>
 
 	<template v-else>
-		<v-menu v-if="selectAllowed" v-model="menuActive" attached>
+		<v-menu v-if="selectAllowed" v-model="menuActive" attached fullHeight>
 			<template #activator>
 				<v-input
 					v-model="localInput"

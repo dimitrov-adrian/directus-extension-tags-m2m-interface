@@ -1,6 +1,6 @@
 {
   "name": "directus-extension-tags-m2m-interface",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "author": {
     "email": "dimitrovadrian+gh@gmail.com",
     "name": "Adrian Dimitrov"
