@@ -34,13 +34,14 @@
   ],
   "scripts": {
     "build": "directus-extension build",
-    "dev": "directus-extension build -w --no-minify --sourcemap"
+    "dev": "directus-extension build -w --no-minify --sourcemap",
+    "link": "directus-extension link"
   },
   "devDependencies": {
-    "@directus/extensions-sdk": "^9.11.0",
+    "@directus/extensions-sdk": "^9.22.4",
     "directus-codestyle": "https://github.com/dimitrov-adrian/directus-codestyle.git",
     "lodash": "^4.17.21",
-    "typescript": "^4.7.2"
+    "typescript": "^4.9.4"
   },
   "prettier": "directus-codestyle/prettier",
   "stylelint": {

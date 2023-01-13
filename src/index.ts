@@ -1,12 +1,12 @@
 import { defineInterface } from '@directus/extensions-sdk';
-import TagsM2MInterface from './interface.vue';
+import InterfaceComponent from './interface-component.vue';
 
 export default defineInterface({
 	id: 'extension-tags-m2m',
 	name: '$t:interfaces.tags.tags',
 	description: '$t:interfaces.tags.description',
 	icon: 'local_offer',
-	component: TagsM2MInterface,
+	component: InterfaceComponent,
 	relational: true,
 	types: ['alias'],
 	localTypes: ['m2m'],

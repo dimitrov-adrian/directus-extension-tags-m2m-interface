@@ -20,7 +20,7 @@
 	</v-notice>
 
 	<template v-else>
-		<v-menu v-if="selectAllowed" v-model="menuActive" attached fullHeight>
+		<v-menu v-if="selectAllowed" v-model="menuActive" attached full-height>
 			<template #activator>
 				<v-input
 					v-model="localInput"
@@ -41,7 +41,7 @@
 
 			<v-list v-if="!disabled && (showAddCustom || suggestedItems.length)">
 				<v-list-item v-if="showAddCustom" clickable @click="stageLocalInput">
-					<v-list-item-content class="add-custom" v-tooltip="t('interfaces.tags.add_tags')">
+					<v-list-item-content v-tooltip="t('interfaces.tags.add_tags')" class="add-custom">
 						{{
 							t('field_in_collection', {
 								field: localInput,
@@ -81,12 +81,12 @@
 			<v-chip
 				v-for="item in items"
 				:key="item[relationInfo.junctionField.field][props.referencingField]"
+				v-tooltip="t('remove')"
 				:disabled="disabled || !selectAllowed"
 				class="tag clickable"
 				small
 				label
 				clickable
-				v-tooltip="t('remove')"
 				@click="deleteItem(item)"
 			>
 				{{ item[relationInfo.junctionField.field][props.referencingField] }}
